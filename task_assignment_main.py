@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timedelta
-from model_utils import TaskPriorityModel, TeamCompatibilityAnalyzer, CompletionPredictor
+from task_assignment_model import TaskPriorityModel, TeamCompatibilityAnalyzer, CompletionPredictor
 
 class TaskManager:
     def __init__(self):
