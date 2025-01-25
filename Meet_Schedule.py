@@ -10,8 +10,8 @@ df["task_start_time"] = pd.to_datetime(df["task_start_time"], errors='coerce')
 df["task_end_time"] = pd.to_datetime(df["task_end_time"], errors='coerce')
 
 # Handle missing values
-df["task_priority"].fillna("unknown", inplace=True)
-df.dropna(subset=["task_start_time", "task_end_time"], inplace=True)
+df["task_priority"] = df["task_priority"].fillna("unknown")
+df = df.dropna(subset=["task_start_time", "task_end_time"])
 
 # Function to round time to the nearest 30 minutes
 def round_to_nearest_30_minutes(dt):
