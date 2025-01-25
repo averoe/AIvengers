@@ -1,3 +1,4 @@
+import pandas as pd 
 import uuid
 from datetime import datetime, timedelta
 from task_assignment_model import TaskPriorityModel, TeamCompatibilityAnalyzer, CompletionPredictor
