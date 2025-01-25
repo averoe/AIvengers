@@ -13,13 +13,12 @@ class TaskPriorityModel:
         self.initialize_model()
     
     def initialize_model(self):
-        # Sample training data
         task_data = {
-            'Deadline': [5, 10, 3, 7, 1, 4, 6, 2, 8, 9],
-            'Complexity': [3, 7, 5, 4, 8, 6, 2, 9, 1, 10],
-            'Dependencies': [1, 2, 1, 3, 0, 2, 1, 0, 3, 2],
-            'Importance': [8, 5, 9, 6, 10, 7, 4, 8, 5, 9],
-            'Priority': ['High', 'Medium', 'High', 'Medium', 'High', 'Medium', 'Low', 'High', 'Low', 'High']
+            'Deadline': [5, 10, 3, 7, 1, 4, 6, 2, 8, 9, 5, 3, 7, 4, 2],
+            'Complexity': [3, 7, 5, 4, 8, 6, 2, 9, 1, 10, 5, 7, 3, 6, 8],
+            'Dependencies': [1, 2, 1, 3, 0, 2, 1, 0, 3, 2, 1, 2, 0, 3, 1],
+            'Importance': [8, 5, 9, 6, 10, 7, 4, 8, 5, 9, 7, 6, 8, 5, 9],
+            'Priority': ['High', 'Medium', 'High', 'Medium', 'High', 'Medium', 'Low', 'High', 'Low', 'High', 'Medium', 'High', 'Low', 'Medium', 'High']
         }
         
         task_df = pd.DataFrame(task_data)
@@ -29,16 +28,12 @@ class TaskPriorityModel:
         y = task_df['Priority']
         
         X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42)
-        
-        # Apply SMOTE for balanced training
-        smote = SMOTE(random_state=42)
-        X_resampled, y_resampled = smote.fit_resample(X_train, y_train)
-        
-        self.priority_clf.fit(X_resampled, y_resampled)
+        self.priority_clf.fit(X_train, y_train)
     
     def predict_priority(self, task_features):
         prediction = self.priority_clf.predict(task_features)
         return self.label_encoder.inverse_transform(prediction)[0]
+
 
 class TeamCompatibilityAnalyzer:
     @staticmethod
