@@ -1,114 +1,142 @@
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
-from imblearn.over_sampling import SMOTE
-from itertools import combinations
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.preprocessing import StandardScaler, MultiLabelBinarizer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.metrics import classification_report
+from typing import List, Dict, Any
 
-class TaskPriorityModel:
+class AdvancedTaskAssignmentModel:
     def __init__(self):
-        self.priority_clf = RandomForestClassifier(random_state=42)
-        self.label_encoder = LabelEncoder()
-        self.initialize_model()
+        self.task_priority_model = None
+        self.employee_recommendation_model = None
+        self.task_complexity_model = None
     
-    def initialize_model(self):
-        task_data = {
-            'Deadline': [5, 10, 3, 7, 1, 4, 6, 2, 8, 9, 5, 3, 7, 4, 2],
-            'Complexity': [3, 7, 5, 4, 8, 6, 2, 9, 1, 10, 5, 7, 3, 6, 8],
-            'Dependencies': [1, 2, 1, 3, 0, 2, 1, 0, 3, 2, 1, 2, 0, 3, 1],
-            'Importance': [8, 5, 9, 6, 10, 7, 4, 8, 5, 9, 7, 6, 8, 5, 9],
-            'Priority': ['High', 'Medium', 'High', 'Medium', 'High', 'Medium', 'Low', 'High', 'Low', 'High', 'Medium', 'High', 'Low', 'Medium', 'High']
+    def prepare_task_data(self, tasks: List[Dict]) -> pd.DataFrame:
+        task_data = []
+        for task in tasks:
+            task_entry = {
+                'deadline': task['deadline'],
+                'importance': task['importance'],
+                'tech_stack_complexity': self._calculate_tech_complexity(task['tech_stack']),
+                'max_team_size': task['max_team_size']
+            }
+            task_data.append(task_entry)
+        return pd.DataFrame(task_data)
+    
+    def _calculate_tech_complexity(self, tech_stack: List[str]) -> float:
+        complexity_map = {
+            'AI': 9, 'ML': 8, 'Cloud': 7, 
+            'Backend': 6, 'Frontend': 5, 
+            'Database': 4, 'Testing': 3
         }
-        
-        task_df = pd.DataFrame(task_data)
-        task_df['Priority'] = self.label_encoder.fit_transform(task_df['Priority'])
-        
-        X = task_df[['Deadline', 'Complexity', 'Dependencies', 'Importance']]
-        y = task_df['Priority']
-        
-        X_train, _, y_train, _ = train_test_split(X, y, test_size=0.2, random_state=42)
-        self.priority_clf.fit(X_train, y_train)
+        return np.mean([complexity_map.get(tech, 5) for tech in tech_stack])
     
-    def predict_priority(self, task_features):
-        prediction = self.priority_clf.predict(task_features)
-        return self.label_encoder.inverse_transform(prediction)[0]
-
-
-class TeamCompatibilityAnalyzer:
-    @staticmethod
-    def calculate_compatibility(team_members, employees_df):
-        if len(team_members) < 2:
-            return 0
+    def train_task_priority_model(self, tasks: List[Dict]):
+        # Prepare data
+        task_df = self.prepare_task_data(tasks)
         
-        compatibility_scores = []
-        for mem1, mem2 in combinations(team_members, 2):
-            emp1 = employees_df[employees_df['Employee ID'] == mem1].iloc[0]
-            emp2 = employees_df[employees_df['Employee ID'] == mem2].iloc[0]
-            
-            # Skill complementarity
-            shared_skills = len(set(emp1['Skill Set']) & set(emp2['Skill Set']))
-            total_skills = len(set(emp1['Skill Set']) | set(emp2['Skill Set']))
-            skill_diversity = (total_skills - shared_skills) / total_skills
-            
-            # Workload balance
-            workload_diff = abs(emp1['Current Workload'] - emp2['Current Workload'])
-            workload_balance = 1 - (workload_diff / 10)
-            
-            # Performance synergy
-            performance_avg = (emp1['Performance Score'] + emp2['Performance Score']) / 20
-            
-            pair_score = (skill_diversity * 0.4 + workload_balance * 0.3 + performance_avg * 0.3) * 10
-            compatibility_scores.append(pair_score)
+        # Add synthetic priority labels for training
+        task_df['priority'] = np.where(
+            (task_df['importance'] > 7) & (task_df['deadline'] < 5), 
+            'High',
+            np.where(
+                (task_df['importance'] > 5) & (task_df['deadline'] < 10), 
+                'Medium', 
+                'Low'
+            )
+        )
         
-        return sum(compatibility_scores) / len(compatibility_scores)
-
-class CompletionPredictor:
-    @staticmethod
-    def predict_individual(task, employee, employees_df):
-        emp_data = employees_df[employees_df['Employee ID'] == employee].iloc[0]
+        # Preprocessing and model pipeline
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ('num', Pipeline([
+                    ('imputer', SimpleImputer(strategy='median')),
+                    ('scaler', StandardScaler())
+                ]), ['deadline', 'importance', 'tech_stack_complexity', 'max_team_size'])
+            ])
         
-        # Calculate various factors
-        skill_match = len(set(task['Tech Stack']) & set(emp_data['Skill Set'])) / len(task['Tech Stack'])
-        workload_capacity = 1 - (emp_data['Current Workload'] / 10)
-        performance_factor = emp_data['Performance Score'] / 10
-        complexity_factor = 1 - (task['Complexity'] / 10)
+        self.task_priority_model = Pipeline([
+            ('preprocessor', preprocessor),
+            ('classifier', GradientBoostingClassifier(
+                n_estimators=200, 
+                learning_rate=0.1, 
+                max_depth=4
+            ))
+        ])
         
-        # Weighted probability calculation
-        probability = (
-            skill_match * 0.35 +
-            workload_capacity * 0.25 +
-            performance_factor * 0.25 +
-            complexity_factor * 0.15
-        ) * 100
+        # Split and train
+        X = task_df[['deadline', 'importance', 'tech_stack_complexity', 'max_team_size']]
+        y = task_df['priority']
         
-        return round(min(100, probability), 2)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, stratify=y)
+        
+        self.task_priority_model.fit(X_train, y_train)
+        
+        # Evaluation
+        y_pred = self.task_priority_model.predict(X_test)
+        print(classification_report(y_test, y_pred))
     
-    @staticmethod
-    def predict_team(task, team_members, employees_df):
-        individual_probs = [CompletionPredictor.predict_individual(task, member, employees_df) 
-                          for member in team_members]
+    def recommend_employees(self, task: Dict, employees: List[Dict]) -> List[int]:
+        # Advanced employee recommendation logic
+        employee_scores = []
         
-        base_prob = sum(individual_probs) / len(individual_probs)
-        team_size_bonus = min(20, len(team_members) * 5)
-        compatibility_score = TeamCompatibilityAnalyzer.calculate_compatibility(team_members, employees_df)
+        for employee in employees:
+            skill_match = len(set(task['tech_stack']) & set(employee['skills'])) / len(task['tech_stack'])
+            workload_factor = 1 / (1 + len(employee['current_tasks']))
+            
+            score = (
+                skill_match * 0.6 + 
+                workload_factor * 0.4
+            )
+            
+            employee_scores.append({
+                'id': employee['id'],
+                'score': score
+            })
         
-        final_prob = base_prob + team_size_bonus + (compatibility_score * 2)
-        return round(min(100, final_prob), 2)
+        # Sort and return top N employee IDs
+        return [
+            emp['id'] for emp in 
+            sorted(employee_scores, key=lambda x: x['score'], reverse=True)
+        ][:task['max_team_size']]
 
-# Utility functions for task complexity and skill matching
-def calculate_task_complexity(tech_stack, dependencies, deadline):
-    base_complexity = {
-        'AI': 9, 'ML': 8, 'Backend': 7, 'Frontend': 6,
-        'Database': 5, 'Testing': 4, 'Documentation': 3
-    }
+def main():
+    # Example usage
+    model = AdvancedTaskAssignmentModel()
     
-    tech_complexity = max([base_complexity.get(tech, 5) for tech in tech_stack])
-    deadline_factor = max(1, 10 - deadline)
-    dependency_factor = min(10, dependencies * 2)
+    # Simulated tasks and employees for demonstration
+    tasks = [
+        {
+            'deadline': 10,
+            'importance': 8,
+            'tech_stack': ['AI', 'ML'],
+            'max_team_size': 3
+        }
+    ]
     
-    return round((tech_complexity * 0.4 + deadline_factor * 0.3 + dependency_factor * 0.3), 2)
+    employees = [
+        {
+            'id': 101,
+            'skills': ['Python', 'AI', 'ML'],
+            'current_tasks': []
+        },
+        {
+            'id': 102,
+            'skills': ['Java', 'Backend'],
+            'current_tasks': []
+        }
+    ]
+    
+    # Train model
+    model.train_task_priority_model(tasks)
+    
+    # Recommend employees
+    recommended_employees = model.recommend_employees(tasks[0], employees)
+    print("Recommended Employees:", recommended_employees)
 
-def get_skill_match_score(required_skills, employee_skills):
-    matched = set(required_skills) & set(employee_skills)
-    return len(matched) / len(required_skills) if required_skills else 0
+if __name__ == "__main__":
+    main()
